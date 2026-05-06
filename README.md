@@ -86,3 +86,13 @@ docker compose up --build
 - **SBERT beats keyword stuffing**: Because sentence embeddings capture semantic context, a resume with "Python" repeated 100 times scores no differently than one with it mentioned once naturally.
 - **Experience curve**: Non-linear — under-qualified candidates are penalised, over-qualified ones are mildly boosted (not penalised).
 - **FAISS-ready**: The vector embeddings from `score_resumes` can be stored in FAISS to allow JD hot-swapping without re-parsing all resumes.
+
+Project Workflow:
+Layer 1 — Ingestion & Extraction
+Resumes are uploaded in any format (PDF, DOCX, image-only PDF, TXT). Each file goes through the multi-format parser, then a normaliser (lowercasing, bullet cleanup, non-ASCII removal), and finally the spaCy anonymiser which strips names, emails, phone numbers, and addresses before any scoring happens — eliminating bias.
+Layer 2 — Hybrid NLP Core
+The system branches based on whether a Job Description is provided. If yes, SBERT encodes both the JD and resumes into vector embeddings stored in FAISS. If no JD is provided, a TF-IDF + Random Forest classifier predicts the candidate's most likely role and auto-generates a synthetic JD — keeping the scoring pipeline unified regardless of the branch.
+Layer 3 — Scoring Engine
+Each resume receives three sub-scores that are combined into a single 1–10 rating: semantic similarity (50%, SBERT cosine similarity capturing context), keyword match (30%, TF-IDF bigram overlap ensuring must-have terms are present), and experience factor (20%, regex-extracted years of experience mapped to a normalised curve).
+Layer 4 — Dashboard
+Results are served via FastAPI and rendered in a Streamlit dashboard showing a ranked leaderboard, a radar chart for skill-gap analysis, an explainability panel explaining why each candidate scored as they did, and a CSV export for the recruiter to download.
