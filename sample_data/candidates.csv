@@ -1,0 +1,4 @@
+candidate_id,name,resume_text,skills
+cand-001,Asha Nair,"Python developer with 4 years of experience in NLP, machine learning, scikit-learn, pandas, SQL, Flask, REST APIs, TF-IDF, and text classification projects.","Python,NLP,Machine Learning,scikit-learn,pandas,SQL,Flask,REST APIs,TF-IDF"
+cand-002,Rahul Mehta,"Frontend developer with 2 years of experience in React, JavaScript, HTML, CSS, UI dashboards, and responsive web applications.","React,JavaScript,HTML,CSS"
+cand-003,Neha Sharma,"Data analyst with 3 years of experience using Python, pandas, SQL, machine learning, reporting dashboards, and basic natural language processing.","Python,pandas,SQL,Machine Learning,NLP"

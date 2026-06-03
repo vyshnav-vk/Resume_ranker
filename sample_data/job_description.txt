@@ -1,0 +1,4 @@
+We are hiring a Python NLP Developer with 3+ years of experience.
+The candidate should know Python, natural language processing, machine learning,
+scikit-learn, pandas, SQL, Flask, and REST APIs. Experience with text
+classification, TF-IDF, embeddings, and resume screening systems is preferred.
