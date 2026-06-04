@@ -81,7 +81,10 @@ ROLE_CORPUS: dict[str, str] = {
     ),
 }
 
-MODEL_CACHE_PATH = Path("/tmp/role_classifier.pkl")
+from pathlib import Path
+
+MODEL_CACHE_PATH = Path("cache/role_classifier.pkl")
+MODEL_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 # ── Model Training ─────────────────────────────────────────────────────────────
