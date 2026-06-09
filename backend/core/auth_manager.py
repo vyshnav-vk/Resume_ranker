@@ -492,6 +492,38 @@ def exchange_google_code(code: str) -> dict | None:
         logger.error(f"Google OAuth token exchange failed: {e}")
         return None
 
+def verify_google_id_token(id_token: str) -> dict | None:
+    """
+    Verifies a Google ID token via Google's tokeninfo API.
+    Returns the user info dict if valid, else None.
+    """
+    if not id_token:
+        return None
+    try:
+        url = f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
+        res = requests.get(url, timeout=10)
+        if res.status_code != 200:
+            logger.error(f"Google ID token verification failed with status {res.status_code}: {res.text}")
+            return None
+        info = res.json()
+        iss = info.get("iss", "")
+        if iss not in ("accounts.google.com", "https://accounts.google.com"):
+            logger.error(f"Google ID token verification failed: invalid issuer {iss}")
+            return None
+            
+        client_id = get_config("GOOGLE_CLIENT_ID")
+        aud = info.get("aud", "")
+        if client_id and aud != client_id:
+            azp = info.get("azp", "")
+            if azp != client_id:
+                logger.error(f"Google ID token verification failed: audience mismatch (aud={aud}, azp={azp}, client_id={client_id})")
+                return None
+                
+        return info
+    except Exception as e:
+        logger.error(f"Exception during Google ID token verification: {e}")
+        return None
+
 def is_email_authorized(email: str) -> bool:
     """
     Checks if an email is authorized. Returns True for all valid email addresses.
