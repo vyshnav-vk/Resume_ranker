@@ -16,6 +16,42 @@ logger = logging.getLogger(__name__)
 env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
+def get_config(key: str, default=None):
+    # 1. Try environment variables
+    val = os.getenv(key)
+    if val is not None:
+        return val
+        
+    # 2. Try st.secrets
+    try:
+        import streamlit as st
+        if key in st.secrets:
+            return st.secrets[key]
+        if key.lower() in st.secrets:
+            return st.secrets[key.lower()]
+            
+        for table_name in ["oauth", "smtp", "database", "admin", "server"]:
+            if table_name in st.secrets:
+                table = st.secrets[table_name]
+                if key in table:
+                    return table[key]
+                if key.lower() in table:
+                    return table[key.lower()]
+                for suffix in ["uri", "url"]:
+                    if key.lower().endswith(suffix) and suffix in table:
+                        return table[suffix]
+                for prefix in ["GOOGLE_", "SMTP_", "ADMIN_"]:
+                    if key.startswith(prefix):
+                        short_key = key.replace(prefix, "")
+                        if short_key in table:
+                            return table[short_key]
+                        if short_key.lower() in table:
+                            return table[short_key.lower()]
+    except Exception:
+        pass
+        
+    return default
+
 import sqlite3
 
 # Initialize SQLite database for persistent user registration
@@ -23,7 +59,7 @@ DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "users.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # MongoDB check & initialization
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI = get_config("MONGO_URI")
 _mongo_db = None
 
 if MONGO_URI:
@@ -198,8 +234,8 @@ def authenticate_user(email: str, password: str) -> bool:
     email_clean = email.strip().lower()
     
     # 1. Check default admin credentials in .env
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com").strip().lower()
-    admin_password = os.getenv("ADMIN_PASSWORD", "admin123456")
+    admin_email = get_config("ADMIN_EMAIL", "admin@example.com").strip().lower()
+    admin_password = get_config("ADMIN_PASSWORD", "admin123456")
     if email_clean == admin_email and password == admin_password:
         return True
         
@@ -329,15 +365,15 @@ def send_otp_email(email: str, otp: str) -> bool:
     Dispatches the OTP code via SMTP. Logs to console/output as fallback.
     """
     email_clean = email.strip().lower()
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_host = get_config("SMTP_HOST", "smtp.gmail.com")
     try:
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_port = int(get_config("SMTP_PORT", "587"))
     except (ValueError, TypeError):
         smtp_port = 587
         
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+    smtp_user = get_config("SMTP_USER")
+    smtp_pass = get_config("SMTP_PASSWORD")
+    smtp_from = get_config("SMTP_FROM", smtp_user)
     
     # Print fallback log for ease of testing
     logger.info(f"=========== DEVELOPMENT CODE FOR {email_clean}: {otp} ===========")
@@ -379,8 +415,8 @@ def send_otp_email(email: str, otp: str) -> bool:
     msg.attach(MIMEText(html_content, "html"))
     
     try:
-        retries = int(os.getenv("SMTP_RETRIES", "5"))
-        backoff = float(os.getenv("SMTP_BACKOFF_BASE", "2.0"))
+        retries = int(get_config("SMTP_RETRIES", "5"))
+        backoff = float(get_config("SMTP_BACKOFF_BASE", "2.0"))
     except (ValueError, TypeError):
         retries = 5
         backoff = 2.0
@@ -417,9 +453,9 @@ def exchange_google_code(code: str) -> dict | None:
     """
     Exchanges OAuth auth code with Google API.
     """
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501/")
+    client_id = get_config("GOOGLE_CLIENT_ID")
+    client_secret = get_config("GOOGLE_CLIENT_SECRET")
+    redirect_uri = get_config("GOOGLE_REDIRECT_URI", "https://resumeranker-l9svhohk5tppdvd8yngazm.streamlit.app/component/streamlit_oauth.authorize_button/")
     
     if not client_id or not client_secret or client_id.startswith("your-") or client_secret.startswith("your-"):
         logger.warning("Google OAuth credentials are not fully configured in .env.")
@@ -477,15 +513,15 @@ def send_user_notification(
     Sends a user notification email directly to the recruiter's email account with neat UI.
     Supports dynamic styles (login, logout, register) and custom time labels.
     """
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_host = get_config("SMTP_HOST", "smtp.gmail.com")
     try:
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_port = int(get_config("SMTP_PORT", "587"))
     except (ValueError, TypeError):
         smtp_port = 587
         
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+    smtp_user = get_config("SMTP_USER")
+    smtp_pass = get_config("SMTP_PASSWORD")
+    smtp_from = get_config("SMTP_FROM", smtp_user)
     
     recipient = recipient_email.strip().lower()
     user_name = name.strip() if name else recipient.split("@")[0].capitalize()

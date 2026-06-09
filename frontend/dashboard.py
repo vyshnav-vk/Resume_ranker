@@ -33,10 +33,46 @@ _ENV_PATH = Path(".env")
 if _ENV_PATH.exists():
     load_dotenv(dotenv_path=_ENV_PATH, override=True)
 
+def get_config(key: str, default=None):
+    # 1. Try environment variables
+    val = os.getenv(key)
+    if val is not None:
+        return val
+        
+    # 2. Try st.secrets
+    try:
+        import streamlit as st
+        if key in st.secrets:
+            return st.secrets[key]
+        if key.lower() in st.secrets:
+            return st.secrets[key.lower()]
+            
+        for table_name in ["oauth", "smtp", "database", "admin", "server"]:
+            if table_name in st.secrets:
+                table = st.secrets[table_name]
+                if key in table:
+                    return table[key]
+                if key.lower() in table:
+                    return table[key.lower()]
+                for suffix in ["uri", "url"]:
+                    if key.lower().endswith(suffix) and suffix in table:
+                        return table[suffix]
+                for prefix in ["GOOGLE_", "SMTP_", "ADMIN_"]:
+                    if key.startswith(prefix):
+                        short_key = key.replace(prefix, "")
+                        if short_key in table:
+                            return table[short_key]
+                        if short_key.lower() in table:
+                            return table[short_key.lower()]
+    except Exception:
+        pass
+        
+    return default
+
 # Determine the API base URL dynamically
-api_base_env = os.getenv("API_BASE")
+api_base_env = get_config("API_BASE")
 if not api_base_env:
-    base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+    base_url = get_config("API_BASE_URL", "http://localhost:8000")
     if base_url.endswith("/"):
         API_BASE = base_url + "api"
     else:
@@ -480,30 +516,33 @@ def check_session_validity():
 check_session_validity()
 
 # Handle Google OAuth callback code exchange
-try:
-    query_params = st.query_params
-    if "code" in query_params:
-        auth_code = query_params["code"]
-        st.query_params.clear()
-        
-        with st.spinner("Completing Google sign-in..."):
-            try:
-                r = requests.post(f"{API_BASE}/auth/oauth/google", json={"code": auth_code}, timeout=15)
-                if r.status_code == 200:
-                    res = r.json()
-                    st.session_state.token = res.get("token")
-                    st.session_state.email = res.get("email")
-                    st.session_state.authenticated = True
-                    fetch_profile()
-                    st.toast("👋 Signed in via Google OAuth!", icon="✅")
-                    st.rerun()
-                else:
-                    err_msg = r.json().get("detail", "OAuth code exchange failed")
-                    st.error(f"❌ OAuth Sign-In Failed: {err_msg}")
-            except Exception as e:
-                st.error(f"❌ Connection error during OAuth callback: {e}")
-except Exception:
-    pass
+if not st.session_state.get("authenticated", False):
+    try:
+        import time
+        time.sleep(0.25) # Small pause to allow WebSocket connection to initialize
+        query_params = st.query_params
+        if "code" in query_params:
+            auth_code = query_params["code"]
+            st.query_params.clear()
+            
+            with st.spinner("Completing Google sign-in..."):
+                try:
+                    r = requests.post(f"{API_BASE}/auth/oauth/google", json={"code": auth_code}, timeout=15)
+                    if r.status_code == 200:
+                        res = r.json()
+                        st.session_state.token = res.get("token")
+                        st.session_state.email = res.get("email")
+                        st.session_state.authenticated = True
+                        fetch_profile()
+                        st.toast("👋 Signed in via Google OAuth!", icon="✅")
+                        st.rerun()
+                    else:
+                        err_msg = r.json().get("detail", "OAuth code exchange failed")
+                        st.error(f"❌ OAuth Sign-In Failed: {err_msg}")
+                except Exception as e:
+                    st.error(f"❌ Connection error during OAuth callback: {e}")
+    except Exception:
+        pass
 
 def render_login_page():
     st.markdown("""
@@ -659,8 +698,8 @@ def render_login_page():
         </div>
         """, unsafe_allow_html=True)
         
-        client_id = os.getenv("GOOGLE_CLIENT_ID")
-        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501/")
+        client_id = get_config("GOOGLE_CLIENT_ID")
+        redirect_uri = get_config("GOOGLE_REDIRECT_URI", "https://resumeranker-l9svhohk5tppdvd8yngazm.streamlit.app/component/streamlit_oauth.authorize_button/")
         
         if client_id and not client_id.startswith("your-") and client_id != "your-google-client-id.apps.googleusercontent.com":
             import urllib.parse
@@ -682,7 +721,7 @@ def render_login_page():
             if mock_login:
                 with st.spinner("Simulating sign-in..."):
                     try:
-                        r = requests.post(f"{API_BASE}/auth/login", json={"email": "admin@example.com", "password": "admin123456"}, timeout=10)
+                        r = requests.post(f"{API_BASE}/auth/login", json={"email": mock_email, "password": "admin123456"}, timeout=10)
                         if r.status_code == 200:
                             res = r.json()
                             st.session_state.token = res.get("token")
