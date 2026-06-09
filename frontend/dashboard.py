@@ -718,13 +718,24 @@ def render_login_page():
                 revoke_token_endpoint=REVOKE_ENDPOINT
             )
             
-            result = oauth2.authorize_button(
-                name="🌐 Continue with Google",
-                redirect_uri=redirect_uri,
-                scope="openid email profile",
-                use_container_width=True,
-                key="google_oauth_btn"
-            )
+            try:
+                result = oauth2.authorize_button(
+                    name="🌐 Continue with Google",
+                    redirect_uri=redirect_uri,
+                    scope="openid email profile",
+                    use_container_width=True,
+                    key="google_oauth_btn"
+                )
+            except Exception as e:
+                # Catch state mismatch/out of date errors caused by Streamlit double execution re-runs
+                if "STATE" in str(e) and "DOES NOT MATCH" in str(e):
+                    for key_to_del in ["state-google_oauth_btn", "pkce-google_oauth_btn"]:
+                        if key_to_del in st.session_state:
+                            del st.session_state[key_to_del]
+                    st.warning("Google login session refreshed. Please click 'Continue with Google' to sign in.")
+                else:
+                    st.error(f"Google OAuth Error: {e}")
+                result = None
             
             if result:
                 token_dict = result.get("token", {})
