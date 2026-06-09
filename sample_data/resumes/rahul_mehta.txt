@@ -1,5 +1,0 @@
-Rahul Mehta
-Frontend Developer
-
-2 years of experience building React dashboards and responsive interfaces.
-Skills include JavaScript, React, HTML, CSS, chart components, and UI design.
