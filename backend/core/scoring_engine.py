@@ -64,11 +64,12 @@ class ResumeScore:
 
 # ── Experience extraction ─────────────────────────────────────────────────────
 _YEAR_PATTERNS = [
-    re.compile(r"(\d+)\+?\s*(?:–|-|to)?\s*\d*\s*years?\s+(?:of\s+)?experience", re.I),
-    re.compile(r"(\d+)\+?\s*years?\s+(?:of\s+)?(?:relevant\s+)?(?:work\s+)?experience", re.I),
+    re.compile(r"\b(\d+)\+?\s*(?:–|-|to)?\s*\d*\s*years?\s+(?:of\s+)?(?:relevant\s+)?(?:work\s+)?experience", re.I),
     re.compile(r"experience\s+of\s+(\d+)\+?\s*years?", re.I),
-    re.compile(r"(\d+)\+?\s*yrs?", re.I),
-    re.compile(r"(\d+)\+?\s*years?", re.I),   # bare "10+ years" or "5 years"
+    re.compile(r"\b(\d+)\+?\s*(?:–|-|to)\s*\d*\s*years?", re.I),
+    re.compile(r"\b(\d+)\+?\s*(?:–|-|to)\s*\d*\s*yrs?", re.I),
+    re.compile(r"(?<!-)(?<!–)(?<!to\s)\b(\d+)\+?\s*years?", re.I),
+    re.compile(r"(?<!-)(?<!–)(?<!to\s)\b(\d+)\+?\s*yrs?", re.I),
 ]
 _WORD_TO_NUM = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,

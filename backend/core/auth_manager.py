@@ -22,80 +22,177 @@ import sqlite3
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "users.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-def init_db():
+# MongoDB check & initialization
+MONGO_URI = os.getenv("MONGO_URI")
+_mongo_db = None
+
+if MONGO_URI:
     try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                email TEXT PRIMARY KEY,
-                name TEXT,
-                password_hash TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                is_verified INTEGER DEFAULT 0
-            )
-        """)
-        # Schema migration: check if name column exists, otherwise add it
+        from pymongo import MongoClient
+        logger.info("MONGO_URI found! Initializing MongoDB client...")
+        _mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
         try:
-            cursor.execute("ALTER TABLE users ADD COLUMN name TEXT")
-        except sqlite3.OperationalError:
-            pass
-        conn.commit()
-        conn.close()
+            _mongo_db = _mongo_client.get_default_database()
+        except Exception:
+            _mongo_db = _mongo_client["resume_ranker"]
+        logger.info(f"Connected to MongoDB. Collection 'users' ready.")
     except Exception as e:
-        logger.error(f"Failed to initialize SQLite database: {e}")
+        logger.error(f"Failed to initialize MongoDB client: {e}. Falling back to SQLite.")
+        _mongo_db = None
+
+def init_db():
+    if _mongo_db is not None:
+        try:
+            _mongo_db.users.create_index("email", unique=True)
+            logger.info("MongoDB 'users' collection unique index verified.")
+        except Exception as e:
+            logger.error(f"Failed to initialize MongoDB index: {e}")
+    else:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    email TEXT PRIMARY KEY,
+                    name TEXT,
+                    password_hash TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    is_verified INTEGER DEFAULT 0
+                )
+            """)
+            # Schema migration: check if name column exists, otherwise add it
+            try:
+                cursor.execute("ALTER TABLE users ADD COLUMN name TEXT")
+            except sqlite3.OperationalError:
+                pass
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to initialize SQLite database: {e}")
 
 init_db()
 
 def create_unverified_user(email: str, name: str, password_hash: str) -> bool:
     email_clean = email.strip().lower()
     name_clean = name.strip() if name else email_clean.split("@")[0].capitalize()
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO users (email, name, password_hash, created_at, is_verified)
-            VALUES (?, ?, ?, ?, 0)
-        """, (email_clean, name_clean, password_hash, time.time()))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        logger.error(f"Failed to write unverified user: {e}")
-        return False
+    
+    if _mongo_db is not None:
+        try:
+            _mongo_db.users.update_one(
+                {"email": email_clean},
+                {
+                    "$set": {
+                        "email": email_clean,
+                        "name": name_clean,
+                        "password_hash": password_hash,
+                        "created_at": time.time(),
+                        "is_verified": False
+                    }
+                },
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to write unverified user to MongoDB: {e}")
+            return False
+    else:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO users (email, name, password_hash, created_at, is_verified)
+                VALUES (?, ?, ?, ?, 0)
+            """, (email_clean, name_clean, password_hash, time.time()))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to write unverified user to SQLite: {e}")
+            return False
 
 def verify_user_email(email: str) -> bool:
     email_clean = email.strip().lower()
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET is_verified = 1 WHERE email = ?", (email_clean,))
-        success = cursor.rowcount > 0
-        conn.commit()
-        conn.close()
-        return success
-    except Exception as e:
-        logger.error(f"Failed to verify user email: {e}")
-        return False
+    if _mongo_db is not None:
+        try:
+            res = _mongo_db.users.update_one(
+                {"email": email_clean},
+                {"$set": {"is_verified": True}}
+            )
+            return res.matched_count > 0
+        except Exception as e:
+            logger.error(f"Failed to verify user email in MongoDB: {e}")
+            return False
+    else:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET is_verified = 1 WHERE email = ?", (email_clean,))
+            success = cursor.rowcount > 0
+            conn.commit()
+            conn.close()
+            return success
+        except Exception as e:
+            logger.error(f"Failed to verify user email in SQLite: {e}")
+            return False
 
 def get_user(email: str) -> dict | None:
     email_clean = email.strip().lower()
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
-        cursor.execute("SELECT email, name, password_hash, is_verified FROM users WHERE email = ?", (email_clean,))
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            return {
-                "email": row[0],
-                "name": row[1],
-                "password_hash": row[2],
-                "is_verified": bool(row[3])
-            }
-    except Exception as e:
-        logger.error(f"Database query error for user {email_clean}: {e}")
-    return None
+    if _mongo_db is not None:
+        try:
+            doc = _mongo_db.users.find_one({"email": email_clean})
+            if doc:
+                return {
+                    "email": doc["email"],
+                    "name": doc.get("name", ""),
+                    "password_hash": doc["password_hash"],
+                    "is_verified": bool(doc.get("is_verified", False))
+                }
+        except Exception as e:
+            logger.error(f"MongoDB query error for user {email_clean}: {e}")
+        return None
+    else:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute("SELECT email, name, password_hash, is_verified FROM users WHERE email = ?", (email_clean,))
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                return {
+                    "email": row[0],
+                    "name": row[1],
+                    "password_hash": row[2],
+                    "is_verified": bool(row[3])
+                }
+        except Exception as e:
+            logger.error(f"Database query error for user {email_clean}: {e}")
+        return None
+
+def update_user_name(email: str, name: str) -> bool:
+    email_clean = email.strip().lower()
+    name_clean = name.strip()
+    if _mongo_db is not None:
+        try:
+            res = _mongo_db.users.update_one(
+                {"email": email_clean},
+                {"$set": {"name": name_clean}}
+            )
+            return res.matched_count > 0
+        except Exception as e:
+            logger.error(f"Failed to update profile name in MongoDB: {e}")
+            return False
+    else:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET name = ? WHERE email = ?", (name_clean, email_clean))
+            success = cursor.rowcount > 0
+            conn.commit()
+            conn.close()
+            return success
+        except Exception as e:
+            logger.error(f"Failed to update profile name in SQLite: {e}")
+            return False
 
 def authenticate_user(email: str, password: str) -> bool:
     email_clean = email.strip().lower()

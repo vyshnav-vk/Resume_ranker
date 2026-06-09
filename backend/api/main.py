@@ -23,7 +23,7 @@ from backend.core.auth_manager import (
     verify_password, create_session, verify_session, destroy_session,
     generate_otp, verify_otp, send_otp_email, exchange_google_code,
     is_email_authorized, authenticate_user, hash_password, send_user_notification,
-    get_user
+    get_user, update_user_name
 )
 
 from backend.core.parser import parse_resume_batch
@@ -301,17 +301,10 @@ def oauth_google(req: OAuthRequest):
         user_name = existing["name"] if existing.get("name") else google_name
         default_prefix = email.split("@")[0].capitalize()
         if google_name and (not existing.get("name") or existing["name"] == default_prefix):
-            import sqlite3
-            from backend.core.auth_manager import DB_PATH
-            try:
-                conn = sqlite3.connect(str(DB_PATH))
-                cursor = conn.cursor()
-                cursor.execute("UPDATE users SET name = ? WHERE email = ?", (google_name, email))
-                conn.commit()
-                conn.close()
+            if update_user_name(email, google_name):
                 user_name = google_name
-            except Exception as e:
-                logger.error(f"Failed to update Google OAuth name for existing user: {e}")
+            else:
+                logger.error(f"Failed to update Google OAuth name for existing user: {email}")
         if not user_name:
             user_name = default_prefix
         if not existing["is_verified"]:
@@ -393,18 +386,10 @@ def update_profile(req: UpdateProfileRequest, authorization: Optional[str] = Hea
     if email == admin_email:
         return AuthResponse(success=True, message="Profile updated (transient admin)")
         
-    # Update in SQLite
-    import sqlite3
-    from backend.core.auth_manager import DB_PATH
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET name = ? WHERE email = ?", (new_name, email))
-        conn.commit()
-        conn.close()
+    # Update in database (hybrid MongoDB/SQLite)
+    if update_user_name(email, new_name):
         return AuthResponse(success=True, message="Profile updated successfully")
-    except Exception as e:
-        logger.error(f"Failed to update profile name for {email}: {e}")
+    else:
         raise HTTPException(status_code=500, detail="Database update failed")
 
 
