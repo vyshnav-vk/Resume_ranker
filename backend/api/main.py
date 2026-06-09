@@ -22,8 +22,8 @@ from pydantic import BaseModel
 from backend.core.auth_manager import (
     verify_password, create_session, verify_session, destroy_session,
     generate_otp, verify_otp, send_otp_email, exchange_google_code,
-    is_email_authorized, authenticate_user, hash_password, send_user_notification,
-    get_user, update_user_name
+    verify_google_id_token, is_email_authorized, authenticate_user,
+    hash_password, send_user_notification, get_user, update_user_name
 )
 
 from backend.core.parser import parse_resume_batch
@@ -115,6 +115,10 @@ class VerifyOtpRequest(BaseModel):
 
 class OAuthRequest(BaseModel):
     code: str
+
+
+class OAuthTokenRequest(BaseModel):
+    id_token: str
 
 
 class AuthResponse(BaseModel):
@@ -322,6 +326,61 @@ def oauth_google(req: OAuthRequest):
         event_type="login"
     )
     return AuthResponse(success=True, message="OAuth login successful", token=token, email=email)
+
+
+@app.post("/api/auth/oauth/google-token", response_model=AuthResponse)
+def oauth_google_token(req: OAuthTokenRequest):
+    user_info = verify_google_id_token(req.id_token)
+    if not user_info:
+        raise HTTPException(status_code=400, detail="Invalid Google ID Token")
+        
+    email = user_info.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Google user profile does not contain an email address")
+        
+    if not is_email_authorized(email):
+        raise HTTPException(status_code=403, detail=f"Google account {email} is not authorized for access")
+        
+    google_name = user_info.get("name", "").strip()
+    if not google_name:
+        google_name = f"{user_info.get('given_name', '')} {user_info.get('family_name', '')}".strip()
+        
+    # Ensure Google authenticated user is registered and verified in database
+    import secrets
+    existing = get_user(email)
+    is_new = False
+    if not existing:
+        is_new = True
+        dummy_hash = hash_password(secrets.token_hex(32))
+        final_name = google_name if google_name else email.split("@")[0].capitalize()
+        create_unverified_user(email, final_name, dummy_hash)
+        verify_user_email(email)
+        user_name = final_name
+    else:
+        user_name = existing["name"] if existing.get("name") else google_name
+        default_prefix = email.split("@")[0].capitalize()
+        if google_name and (not existing.get("name") or existing["name"] == default_prefix):
+            if update_user_name(email, google_name):
+                user_name = google_name
+            else:
+                logger.error(f"Failed to update Google OAuth name for existing user: {email}")
+        if not user_name:
+            user_name = default_prefix
+        if not existing["is_verified"]:
+            verify_user_email(email)
+            
+    token = create_session(email)
+    
+    action_str = "registered and signed in" if is_new else "signed in"
+    send_user_notification(
+        recipient_email=email,
+        name=user_name,
+        subject="🌐 Google OAuth Login Success",
+        event_title="Google OAuth Login",
+        message_body=f"You have successfully {action_str} to Resume Ranker Pro using your Google account.",
+        event_type="login"
+    )
+    return AuthResponse(success=True, message="OAuth token login successful", token=token, email=email)
 
 
 @app.get("/api/auth/verify-token", response_model=AuthResponse)

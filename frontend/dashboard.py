@@ -699,19 +699,62 @@ def render_login_page():
         """, unsafe_allow_html=True)
         
         client_id = get_config("GOOGLE_CLIENT_ID")
+        client_secret = get_config("GOOGLE_CLIENT_SECRET")
         redirect_uri = get_config("GOOGLE_REDIRECT_URI", "https://resumeranker-l9svhohk5tppdvd8yngazm.streamlit.app/component/streamlit_oauth.authorize_button/")
         
         if client_id and not client_id.startswith("your-") and client_id != "your-google-client-id.apps.googleusercontent.com":
-            import urllib.parse
-            scope = "openid email profile"
-            google_auth_url = (
-                f"https://accounts.google.com/o/oauth2/v2/auth?"
-                f"client_id={urllib.parse.quote(client_id)}&"
-                f"redirect_uri={urllib.parse.quote(redirect_uri)}&"
-                f"response_type=code&"
-                f"scope={urllib.parse.quote(scope)}"
+            from streamlit_oauth import OAuth2Component
+            
+            AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+            TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+            REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
+            
+            oauth2 = OAuth2Component(
+                client_id=client_id,
+                client_secret=client_secret,
+                authorize_endpoint=AUTHORIZE_ENDPOINT,
+                token_endpoint=TOKEN_ENDPOINT,
+                refresh_token_endpoint=TOKEN_ENDPOINT,
+                revoke_token_endpoint=REVOKE_ENDPOINT
             )
-            st.link_button("🌐 Continue with Google", google_auth_url, use_container_width=True)
+            
+            result = oauth2.authorize_button(
+                name="🌐 Continue with Google",
+                redirect_uri=redirect_uri,
+                scope="openid email profile",
+                use_container_width=True,
+                key="google_oauth_btn"
+            )
+            
+            if result:
+                token_dict = result.get("token", {})
+                raw_id_token = None
+                if isinstance(token_dict, dict):
+                    raw_id_token = token_dict.get("id_token")
+                    
+                if raw_id_token:
+                    with st.spinner("Completing Google sign-in..."):
+                        try:
+                            r = requests.post(
+                                f"{API_BASE}/auth/oauth/google-token",
+                                json={"id_token": raw_id_token},
+                                timeout=15
+                            )
+                            if r.status_code == 200:
+                                res = r.json()
+                                st.session_state.token = res.get("token")
+                                st.session_state.email = res.get("email")
+                                st.session_state.authenticated = True
+                                fetch_profile()
+                                st.toast("👋 Signed in via Google OAuth!", icon="✅")
+                                st.rerun()
+                            else:
+                                err_msg = r.json().get("detail", "OAuth token login failed")
+                                st.error(f"❌ OAuth Sign-In Failed: {err_msg}")
+                        except Exception as e:
+                            st.error(f"❌ Connection error during Google sign-in: {e}")
+                else:
+                    st.error("❌ Failed to retrieve Google ID token.")
         else:
             st.warning("⚠️ Google OAuth is not configured on the server. Change GOOGLE_CLIENT_ID in the `.env` file to enable.")
             
