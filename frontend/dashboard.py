@@ -537,7 +537,10 @@ if not st.session_state.get("authenticated", False):
                         st.toast("👋 Signed in via Google OAuth!", icon="✅")
                         st.rerun()
                     else:
-                        err_msg = r.json().get("detail", "OAuth code exchange failed")
+                        try:
+                            err_msg = r.json().get("detail", "OAuth code exchange failed")
+                        except Exception:
+                            err_msg = f"Server error (Status {r.status_code})"
                         st.error(f"❌ OAuth Sign-In Failed: {err_msg}")
                 except Exception as e:
                     st.error(f"❌ Connection error during OAuth callback: {e}")
@@ -760,7 +763,10 @@ def render_login_page():
                                 st.toast("👋 Signed in via Google OAuth!", icon="✅")
                                 st.rerun()
                             else:
-                                err_msg = r.json().get("detail", "OAuth token login failed")
+                                try:
+                                    err_msg = r.json().get("detail", "OAuth token login failed")
+                                except Exception:
+                                    err_msg = f"Server error (Status {r.status_code})"
                                 st.error(f"❌ OAuth Sign-In Failed: {err_msg}")
                         except Exception as e:
                             st.error(f"❌ Connection error during Google sign-in: {e}")

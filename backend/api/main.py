@@ -23,7 +23,8 @@ from backend.core.auth_manager import (
     verify_password, create_session, verify_session, destroy_session,
     generate_otp, verify_otp, send_otp_email, exchange_google_code,
     verify_google_id_token, is_email_authorized, authenticate_user,
-    hash_password, send_user_notification, get_user, update_user_name
+    hash_password, send_user_notification, get_user, update_user_name,
+    create_unverified_user, verify_user_email
 )
 
 from backend.core.parser import parse_resume_batch
