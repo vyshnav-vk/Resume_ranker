@@ -1,6 +1,0 @@
-Asha Nair
-Python NLP Developer
-
-4 years of experience building resume screening and text classification tools.
-Skills include Python, natural language processing, machine learning,
-scikit-learn, pandas, SQL, Flask, REST APIs, TF-IDF, and embeddings.

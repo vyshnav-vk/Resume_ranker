@@ -1,5 +1,0 @@
-Neha Sharma
-Data Analyst
-
-3 years of experience with Python, pandas, SQL, reporting dashboards,
-basic NLP analysis, machine learning experiments, and business analytics.
