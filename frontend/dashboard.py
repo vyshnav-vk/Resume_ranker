@@ -13,22 +13,66 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-
+import socket
+import threading
+import urllib.parse
+import os
 import pandas as pd
 import plotly.graph_objects as go
 import requests
 import streamlit as st
-import os
-from pathlib import Path
 from dotenv import load_dotenv
 
-API_BASE = "http://localhost:8000/api"
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+# Add project root to sys.path to allow importing backend module in Streamlit
+root_dir = Path(__file__).resolve().parent.parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
 
-# Load env configuration
+# Load env configuration (must run before imports/database init)
 _ENV_PATH = Path(".env")
 if _ENV_PATH.exists():
     load_dotenv(dotenv_path=_ENV_PATH, override=True)
+
+# Determine the API base URL dynamically
+api_base_env = os.getenv("API_BASE")
+if not api_base_env:
+    base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+    if base_url.endswith("/"):
+        API_BASE = base_url + "api"
+    else:
+        API_BASE = base_url + "/api"
+else:
+    API_BASE = api_base_env
+
+# Extract host and port for the background server
+try:
+    parsed_url = urllib.parse.urlparse(API_BASE)
+    backend_port = parsed_url.port or 8000
+    backend_host = parsed_url.hostname or "127.0.0.1"
+except Exception:
+    backend_port = 8000
+    backend_host = "127.0.0.1"
+
+# Launch backend FastAPI server inside a background thread if it's local and not running
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('127.0.0.1', port)) == 0
+
+is_local = backend_host in ("localhost", "127.0.0.1", "0.0.0.0")
+
+if is_local and not is_port_in_use(backend_port):
+    import uvicorn
+    from backend.api.main import app as fastapi_app
+    
+    def run_backend():
+        bind_host = "127.0.0.1" if backend_host == "localhost" else backend_host
+        uvicorn.run(fastapi_app, host=bind_host, port=backend_port, log_level="warning")
+        
+    t = threading.Thread(target=run_backend, daemon=True)
+    t.start()
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
 
 # ── Logo (optional — won't crash if missing) ──────────────────────────────────
 _LOGO_PATH = Path("frontend/Logo.jpg")

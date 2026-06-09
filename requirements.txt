@@ -106,3 +106,6 @@ watchfiles==1.1.1
 weasel==0.4.3
 websockets==16.0
 wrapt==2.1.2
+pymongo==4.10.1
+dnspython==2.6.1
+motor>=3.5.0
