@@ -118,7 +118,7 @@ if _LOGO_PATH.exists():
     _logo_img = Image.open(_LOGO_PATH)
 
 st.set_page_config(
-    page_title  = "Resume Ranker Pro",
+    page_title  = "Smart Recruitment Assistant",
     page_icon   = _logo_img or "🎯",
     layout      = "wide",
     initial_sidebar_state = "expanded",
@@ -550,8 +550,8 @@ if not st.session_state.get("authenticated", False):
 def render_login_page():
     st.markdown("""
     <div style="text-align: center; margin-top: 2.5rem; margin-bottom: 1.5rem;">
-        <h1 style="font-size: 2.6rem; margin-bottom: 0.5rem; color: var(--text-color) !important;">🎯 Resume Ranker Pro</h1>
-        <p style="opacity: 0.6; font-size: 1.1rem; color: var(--text-color) !important;">AI-Powered Candidate Extraction & Ranking Pipeline</p>
+        <h1 style="font-size: 2.6rem; margin-bottom: 0.5rem; color: var(--text-color) !important;">🎯 Smart Recruitment Assistant</h1>
+        <p style="opacity: 0.6; font-size: 1.1rem; color: var(--text-color) !important;">Resume Ranking and Skill Gap Analysis</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -885,14 +885,14 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.caption("Resume Ranker Pro v2.2 · SBERT + TF-IDF + Random Forest")
+    st.caption("Smart Recruitment Assistant v2.2 · SBERT + TF-IDF + Random Forest")
 
 
 # ── Landing page ───────────────────────────────────────────────────────────────
-st.markdown("# 🎯 Resume Ranker Pro")
+st.markdown("# 🎯 Smart Recruitment Assistant")
 st.markdown(
     '<p style="opacity:.6;margin-top:-.5rem;margin-bottom:1.5rem;font-size:.95rem">'
-    'Hybrid NLP scoring · ML role classification · Skill extraction</p>',
+    'Resume Ranking and Skill Gap Analysis</p>',
     unsafe_allow_html=True,
 )
 
